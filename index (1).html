@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zavala's Bash Check-In</title>
+<style>
+  :root{
+    --navy:#12235B;
+    --orange:#E8512A;
+    --paper:#FAF7F2;
+    --green:#1B7F4B;
+    --grey:#6B7280;
+    --rule:#E4E0D8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--navy);
+    min-height:100vh;
+  }
+
+  /* Header */
+  header{
+    background:var(--navy);
+    color:#fff;
+    padding:14px 16px;
+    position:sticky;top:0;z-index:10;
+    display:flex;align-items:center;justify-content:space-between;
+    box-shadow:0 2px 8px rgba(0,0,0,.15);
+  }
+  header .title{font-weight:700;font-size:17px;letter-spacing:.02em;}
+  header .title span{color:var(--orange);}
+  header .count{
+    background:rgba(255,255,255,.12);
+    border-radius:20px;padding:6px 12px;
+    font-size:13px;font-weight:600;white-space:nowrap;
+  }
+  header .count b{color:#fff;font-size:15px;}
+
+  /* Search */
+  .search-wrap{padding:14px 16px 8px;position:sticky;top:56px;background:var(--paper);z-index:9;}
+  #search{
+    width:100%;font-size:19px;padding:16px 18px;
+    border:2px solid var(--rule);border-radius:14px;
+    background:#fff;color:var(--navy);outline:none;
+    transition:border-color .15s;
+  }
+  #search:focus{border-color:var(--orange);}
+  #search::placeholder{color:#B4AEA4;}
+
+  .hint{padding:2px 18px 6px;color:var(--grey);font-size:13px;}
+
+  /* Results list */
+  .list{padding:4px 12px 90px;}
+  .card{
+    background:#fff;border:1px solid var(--rule);border-radius:14px;
+    padding:14px 16px;margin:8px 4px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    box-shadow:0 1px 3px rgba(0,0,0,.05);
+  }
+  .card.in{background:#F1F8F3;border-color:#BFE3CD;}
+  .card .who{min-width:0;flex:1;}
+  .card .name{font-weight:700;font-size:17px;line-height:1.25;overflow-wrap:anywhere;}
+  .card .meta{margin-top:5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+
+  .tag{font-size:12px;font-weight:700;padding:4px 9px;border-radius:8px;white-space:nowrap;letter-spacing:.02em;}
+  .tag.paid{background:#E7F4EC;color:var(--green);}
+  .tag.ask{background:#FDECE6;color:var(--orange);}
+  .tag.yes{background:#EAf0FB;color:var(--navy);}
+  .tag.maybe{background:#FFF4E0;color:#9A6B00;}
+  .tag.no{background:#F3F1EE;color:var(--grey);}
+  .tag.noreply{background:#F3F1EE;color:var(--grey);}
+  .tag.table{background:#EEE9FA;color:#5B3FA6;}
+  .tag.party{background:#F3F1EE;color:var(--navy);}
+  .tag.walkin{background:#FDECE6;color:var(--orange);}
+  .amt{font-weight:700;color:var(--green);font-size:13px;}
+
+  /* Check-in button */
+  .btn{
+    border:none;border-radius:12px;font-weight:700;
+    padding:14px 16px;font-size:15px;cursor:pointer;white-space:nowrap;
+    min-width:104px;transition:transform .08s,background .15s;
+  }
+  .btn:active{transform:scale(.94);}
+  .btn.checkin{background:var(--orange);color:#fff;}
+  .btn.done{background:var(--green);color:#fff;}
+  .btn.undo{background:#fff;color:var(--grey);border:1px solid var(--rule);font-size:13px;min-width:auto;padding:10px 12px;}
+
+  .checkmark{font-size:15px;margin-right:4px;}
+
+  /* Empty / walk-in state */
+  .empty{text-align:center;padding:36px 24px;color:var(--grey);}
+  .empty .big{font-size:16px;font-weight:600;color:var(--navy);margin-bottom:6px;}
+  .walkin-btn{
+    margin-top:18px;background:var(--navy);color:#fff;border:none;
+    padding:14px 22px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;
+  }
+  .walkin-btn:active{transform:scale(.96);}
+
+  /* Toast */
+  .toast{
+    position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(40px);
+    background:var(--navy);color:#fff;padding:13px 22px;border-radius:30px;
+    font-weight:600;font-size:15px;opacity:0;pointer-events:none;
+    transition:opacity .2s,transform .2s;z-index:20;box-shadow:0 4px 16px rgba(0,0,0,.25);
+    max-width:90vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.green{background:var(--green);}
+
+  /* Footer tabs */
+  .tabs{
+    position:fixed;bottom:0;left:0;right:0;background:#fff;
+    border-top:1px solid var(--rule);display:flex;z-index:8;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tab{flex:1;text-align:center;padding:12px 4px;font-size:12px;font-weight:600;color:var(--grey);cursor:pointer;}
+  .tab.active{color:var(--orange);}
+  .tab .n{display:block;font-size:17px;font-weight:800;color:var(--navy);}
+  .tab.active .n{color:var(--orange);}
+
+  .loading{text-align:center;padding:40px;color:var(--grey);}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">ZAVALA'S <span>BASH</span> Check-In</div>
+  <div class="count"><b id="hdrIn">0</b> in</div>
+</header>
+
+<div class="search-wrap">
+  <input id="search" type="text" autocomplete="off" autocorrect="off" autocapitalize="words"
+         placeholder="Type a name..." inputmode="search">
+</div>
+<div class="hint" id="hint">Start typing to find a guest.</div>
+
+<div class="list" id="list">
+  <div class="loading">Loading guest list...</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-view="search" onclick="setView('search')">
+    <span class="n" id="tabTotal">0</span>Search
+  </div>
+  <div class="tab" data-view="in" onclick="setView('in')">
+    <span class="n" id="tabIn">0</span>Checked In
+  </div>
+  <div class="tab" data-view="expected" onclick="setView('expected')">
+    <span class="n" id="tabYes">0</span>Expected
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://hwvqmjhupvrpxyekvebj.supabase.co";
+const SUPABASE_KEY = "sb_publishable_aaFQx9fWI5wXB33fYQm-kw_lWu2X-KJ";
+const H = {
+  "apikey": SUPABASE_KEY,
+  "Authorization": "Bearer " + SUPABASE_KEY,
+  "Content-Type": "application/json"
+};
+
+let guests = [];      // full list in memory
+let view = "search";  // search | in | expected
+let query = "";
+
+// ---- Load all guests ----
+async function loadGuests(){
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=*&order=name.asc`, {headers:H});
+    guests = await res.json();
+    render();
+    updateCounts();
+  }catch(e){
+    document.getElementById('list').innerHTML =
+      `<div class="empty"><div class="big">Could not load the list.</div>Check the wifi and pull down to retry.</div>`;
+  }
+}
+
+// ---- Counts ----
+function updateCounts(){
+  const total = guests.length;
+  const inCount = guests.filter(g=>g.checked_in).length;
+  const yesCount = guests.filter(g=>g.rsvp==='yes').length;
+  document.getElementById('hdrIn').textContent = inCount;
+  document.getElementById('tabIn').textContent = inCount;
+  document.getElementById('tabTotal').textContent = total;
+  document.getElementById('tabYes').textContent = yesCount;
+}
+
+// ---- Search box ----
+const searchEl = document.getElementById('search');
+searchEl.addEventListener('input', ()=>{
+  query = searchEl.value.trim().toLowerCase();
+  render();
+});
+
+function setView(v){
+  view = v;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view===v));
+  if(v==='search'){ searchEl.focus(); }
+  render();
+}
+
+// ---- Render list ----
+function render(){
+  const list = document.getElementById('list');
+  const hint = document.getElementById('hint');
+  let rows = [];
+
+  if(view==='search'){
+    hint.style.display='block';
+    if(query.length===0){
+      hint.textContent = "Start typing to find a guest.";
+      list.innerHTML = "";
+      return;
+    }
+    hint.textContent = "";
+    rows = guests.filter(g => g.name.toLowerCase().includes(query)
+                           || (g.email && g.email.toLowerCase().includes(query)));
+    rows.sort((a,b)=> a.name.localeCompare(b.name));
+  } else if(view==='in'){
+    hint.style.display='none';
+    rows = guests.filter(g=>g.checked_in)
+                 .sort((a,b)=> (b.checked_in_at||'').localeCompare(a.checked_in_at||''));
+  } else if(view==='expected'){
+    hint.style.display='none';
+    rows = guests.filter(g=>g.rsvp==='yes')
+                 .sort((a,b)=> Number(a.checked_in)-Number(b.checked_in) || a.name.localeCompare(b.name));
+  }
+
+  if(rows.length===0){
+    if(view==='search'){
+      list.innerHTML = `
+        <div class="empty">
+          <div class="big">No match for "${escapeHtml(searchEl.value)}"</div>
+          They may be a walk-in, or the name is spelled differently.
+          <br><button class="walkin-btn" onclick="addWalkin()">+ Add "${escapeHtml(searchEl.value)}" as walk-in</button>
+        </div>`;
+    } else if(view==='in'){
+      list.innerHTML = `<div class="empty"><div class="big">Nobody checked in yet.</div>They'll show here as they arrive.</div>`;
+    } else {
+      list.innerHTML = `<div class="empty"><div class="big">No "yes" RSVPs loaded.</div></div>`;
+    }
+    return;
+  }
+
+  list.innerHTML = rows.map(cardHtml).join("");
+}
+
+// ---- One guest card ----
+function cardHtml(g){
+  const paidTag = g.paid
+    ? `<span class="tag paid">✓ PAID${g.paid_amount?`</span> <span class="amt">$${Number(g.paid_amount).toFixed(0)}</span>`:`</span>`}`
+    : `<span class="tag ask">ASK / SQUARE</span>`;
+
+  const tableTag = g.table_name ? ` <span class="tag table">${escapeHtml(g.table_name)}</span>` : "";
+
+  let rsvpTag = "";
+  if(g.rsvp==='yes') rsvpTag = `<span class="tag yes">RSVP yes</span>`;
+  else if(g.rsvp==='maybe') rsvpTag = `<span class="tag maybe">maybe</span>`;
+  else if(g.rsvp==='no') rsvpTag = `<span class="tag no">said no</span>`;
+  else if(g.rsvp==='walkin') rsvpTag = `<span class="tag walkin">WALK-IN</span>`;
+  else rsvpTag = `<span class="tag noreply">no reply</span>`;
+
+  const partyTag = (g.party_size && g.party_size>1) ? ` <span class="tag party">party of ${g.party_size}</span>` : "";
+
+  const btn = g.checked_in
+    ? `<button class="btn undo" onclick="undo('${g.id}')">Undo</button>`
+    : `<button class="btn checkin" onclick="checkin('${g.id}')">Check in</button>`;
+
+  const doneBadge = g.checked_in ? `<span class="checkmark">✓</span>` : "";
+
+  return `
+    <div class="card ${g.checked_in?'in':''}" id="card-${g.id}">
+      <div class="who">
+        <div class="name">${doneBadge}${escapeHtml(g.name)}</div>
+        <div class="meta">${paidTag}${tableTag}${rsvpTag}${partyTag}</div>
+      </div>
+      ${btn}
+    </div>`;
+}
+
+// ---- Check in ----
+async function checkin(id){
+  const g = guests.find(x=>x.id===id);
+  if(!g) return;
+  g.checked_in = true;
+  g.checked_in_at = new Date().toISOString();
+  render(); updateCounts();
+  toast(`${g.name} checked in`, true);
+  try{
+    await fetch(`${SUPABASE_URL}/rest/v1/guests?id=eq.${id}`, {
+      method:"PATCH", headers:H,
+      body: JSON.stringify({checked_in:true, checked_in_at:g.checked_in_at})
+    });
+  }catch(e){
+    toast("Saved locally, will sync when back online");
+  }
+}
+
+async function undo(id){
+  const g = guests.find(x=>x.id===id);
+  if(!g) return;
+  g.checked_in = false; g.checked_in_at = null;
+  render(); updateCounts();
+  toast(`${g.name} un-checked`);
+  try{
+    await fetch(`${SUPABASE_URL}/rest/v1/guests?id=eq.${id}`, {
+      method:"PATCH", headers:H,
+      body: JSON.stringify({checked_in:false, checked_in_at:null})
+    });
+  }catch(e){}
+}
+
+// ---- Walk-in ----
+async function addWalkin(){
+  const name = searchEl.value.trim();
+  if(!name) return;
+  const rec = {name:name, rsvp:'walkin', party_size:1, paid:false,
+               checked_in:true, checked_in_at:new Date().toISOString()};
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/guests`, {
+      method:"POST", headers:{...H, "Prefer":"return=representation"},
+      body: JSON.stringify(rec)
+    });
+    const created = await res.json();
+    if(created && created[0]) guests.push(created[0]);
+    searchEl.value=""; query="";
+    toast(`${name} added and checked in`, true);
+    render(); updateCounts();
+  }catch(e){
+    toast("Could not add walk-in, check wifi");
+  }
+}
+
+// ---- Toast ----
+let toastTimer;
+function toast(msg, green){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = "toast show" + (green?" green":"");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.className="toast", 1900);
+}
+
+function escapeHtml(s){
+  return (s||"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---- Refresh counts every 15s so multiple devices stay roughly in sync ----
+setInterval(async ()=>{
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=*&order=name.asc`, {headers:H});
+    const fresh = await res.json();
+    if(Array.isArray(fresh) && fresh.length){ guests = fresh; render(); updateCounts(); }
+  }catch(e){}
+}, 15000);
+
+loadGuests();
+searchEl.focus();
+</script>
+</body>
+</html>
