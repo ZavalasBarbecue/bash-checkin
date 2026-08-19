@@ -169,7 +169,7 @@
   <input id="search" type="text" autocomplete="off" autocorrect="off" autocapitalize="words"
          placeholder="Type a name..." inputmode="search">
 </div>
-<div class="hint" id="hint">Start typing to find a guest.</div>
+<div class="hint" id="hint">Loading expected guests...</div>
 
 <div class="list" id="list">
   <div class="loading">Loading guest list...</div>
@@ -276,8 +276,16 @@ function render(){
   if(view==='search'){
     hint.style.display='block';
     if(query.length===0){
-      hint.textContent = "Start typing to find a guest.";
-      list.innerHTML = "";
+      // Empty box: show the "yes" RSVPs who haven't checked in yet (most likely arrivals)
+      const waiting = guests.filter(g => g.rsvp==='yes' && !g.checked_in)
+                            .sort((a,b)=> a.name.localeCompare(b.name));
+      if(waiting.length){
+        hint.textContent = `${waiting.length} expected, not here yet. Or type any name.`;
+        list.innerHTML = waiting.map(cardHtml).join("");
+      } else {
+        hint.textContent = "Type a name to find any guest.";
+        list.innerHTML = "";
+      }
       return;
     }
     hint.textContent = "";
