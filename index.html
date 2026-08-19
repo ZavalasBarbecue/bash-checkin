@@ -123,9 +123,43 @@
   .tab.active .n{color:var(--orange);}
 
   .loading{text-align:center;padding:40px;color:var(--grey);}
+
+  /* Passcode lock screen */
+  #lock{
+    position:fixed;inset:0;background:var(--navy);z-index:100;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px;text-align:center;
+  }
+  #lock .lk-title{color:#fff;font-weight:700;font-size:22px;letter-spacing:.02em;margin-bottom:6px;}
+  #lock .lk-title span{color:var(--orange);}
+  #lock .lk-sub{color:#C9D2EE;font-size:15px;margin-bottom:28px;}
+  #lock input{
+    width:200px;font-size:28px;text-align:center;letter-spacing:.3em;
+    padding:14px;border:2px solid rgba(255,255,255,.25);border-radius:14px;
+    background:rgba(255,255,255,.08);color:#fff;outline:none;
+  }
+  #lock input:focus{border-color:var(--orange);}
+  #lock input::placeholder{color:rgba(255,255,255,.35);letter-spacing:.15em;}
+  #lock .lk-btn{
+    margin-top:18px;background:var(--orange);color:#fff;border:none;
+    padding:15px 40px;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;
+  }
+  #lock .lk-btn:active{transform:scale(.96);}
+  #lock .lk-err{color:#FFB4A0;font-size:14px;margin-top:14px;height:18px;font-weight:600;}
+  body.locked{overflow:hidden;}
 </style>
 </head>
-<body>
+<body class="locked">
+
+<div id="lock">
+  <div class="lk-title">ZAVALA'S <span>BASH</span></div>
+  <div class="lk-sub">Enter the check-in code</div>
+  <input id="lockInput" type="tel" inputmode="numeric" maxlength="8"
+         placeholder="code" autocomplete="off">
+  <div class="lk-err" id="lockErr"></div>
+  <button class="lk-btn" onclick="tryUnlock()">Enter</button>
+</div>
+
 <header>
   <div class="title">ZAVALA'S <span>BASH</span> Check-In</div>
   <div class="count"><b id="hdrIn">0</b> in</div>
@@ -156,6 +190,33 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ---- Passcode gate ----
+const PASSCODE = "1956";
+const lockInput = document.getElementById('lockInput');
+
+function tryUnlock(){
+  const val = (lockInput.value||"").trim();
+  if(val === PASSCODE){
+    // remember for this device so they don't retype on refresh
+    try{ sessionStorage.setItem('bashUnlocked','1'); }catch(e){}
+    unlock();
+  } else {
+    document.getElementById('lockErr').textContent = "Wrong code, try again";
+    lockInput.value = "";
+    lockInput.focus();
+  }
+}
+function unlock(){
+  document.getElementById('lock').style.display = "none";
+  document.body.classList.remove('locked');
+  startApp();
+}
+lockInput.addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
+
+// if already unlocked on this device this session, skip the screen
+let alreadyUnlocked = false;
+try{ alreadyUnlocked = sessionStorage.getItem('bashUnlocked')==='1'; }catch(e){}
+
 const SUPABASE_URL = "https://hwvqmjhupvrpxyekvebj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_aaFQx9fWI5wXB33fYQm-kw_lWu2X-KJ";
 const H = {
@@ -353,16 +414,31 @@ function escapeHtml(s){
 }
 
 // ---- Refresh counts every 15s so multiple devices stay roughly in sync ----
-setInterval(async ()=>{
-  try{
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=*&order=name.asc`, {headers:H});
-    const fresh = await res.json();
-    if(Array.isArray(fresh) && fresh.length){ guests = fresh; render(); updateCounts(); }
-  }catch(e){}
-}, 15000);
+let refreshTimer = null;
+function startRefresh(){
+  if(refreshTimer) return;
+  refreshTimer = setInterval(async ()=>{
+    try{
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=*&order=name.asc`, {headers:H});
+      const fresh = await res.json();
+      if(Array.isArray(fresh) && fresh.length){ guests = fresh; render(); updateCounts(); }
+    }catch(e){}
+  }, 15000);
+}
 
-loadGuests();
-searchEl.focus();
+// ---- App starts only after the passcode is entered ----
+function startApp(){
+  loadGuests();
+  startRefresh();
+  searchEl.focus();
+}
+
+// Boot: either show the lock, or (if already unlocked this session) go straight in
+if(alreadyUnlocked){
+  unlock();
+} else {
+  lockInput.focus();
+}
 </script>
 </body>
 </html>
