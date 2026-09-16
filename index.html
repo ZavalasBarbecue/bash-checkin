@@ -162,7 +162,7 @@
 
 <header>
   <div class="title">ZAVALA'S <span>BASH</span> Check-In</div>
-  <div class="count"><b id="hdrIn">0</b> in</div>
+  <div class="count"><b id="hdrIn">0</b> / <span id="hdrExp">0</span> in</div>
 </header>
 
 <div class="search-wrap">
@@ -228,6 +228,7 @@ const H = {
 let guests = [];      // full list in memory
 let view = "search";  // search | in | expected
 let query = "";
+let pending = {};   // id -> desired {checked_in, checked_in_at} not yet confirmed saved
 
 // ---- Load all guests ----
 async function loadGuests(){
@@ -247,7 +248,10 @@ function updateCounts(){
   const total = guests.length;
   const inCount = guests.filter(g=>g.checked_in).length;
   const yesCount = guests.filter(g=>g.rsvp==='yes').length;
-  document.getElementById('hdrIn').textContent = inCount;
+  const inPeople = guests.filter(g=>g.checked_in).reduce((s,g)=>s+(Number(g.party_size)||1),0);
+  const expPeople = guests.filter(g=>g.rsvp==='yes').reduce((s,g)=>s+(Number(g.party_size)||1),0);
+  document.getElementById('hdrIn').textContent = inPeople;
+  document.getElementById('hdrExp').textContent = expPeople;
   document.getElementById('tabIn').textContent = inCount;
   document.getElementById('tabTotal').textContent = total;
   document.getElementById('tabYes').textContent = yesCount;
@@ -362,13 +366,24 @@ async function checkin(id){
   g.checked_in_at = new Date().toISOString();
   render(); updateCounts();
   toast(`${g.name} checked in`, true);
+  pending[id] = {checked_in:true, checked_in_at:g.checked_in_at};
+  saveCheck(id);
+}
+
+// Save one check-in state; keeps retrying via the refresh loop until it sticks
+async function saveCheck(id){
+  const want = pending[id];
+  if(!want) return;
   try{
-    await fetch(`${SUPABASE_URL}/rest/v1/guests?id=eq.${id}`, {
-      method:"PATCH", headers:H,
-      body: JSON.stringify({checked_in:true, checked_in_at:g.checked_in_at})
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/guests?id=eq.${id}`, {
+      method:"PATCH", headers:H, body: JSON.stringify(want)
     });
+    if(!res.ok) throw new Error('save failed');
+    // only clear if no newer tap happened in the meantime
+    const cur = pending[id];
+    if(cur && cur.checked_in===want.checked_in && cur.checked_in_at===want.checked_in_at) delete pending[id];
   }catch(e){
-    toast("Saved locally, will sync when back online");
+    // leave it in pending; the 15s loop retries automatically
   }
 }
 
@@ -378,19 +393,17 @@ async function undo(id){
   g.checked_in = false; g.checked_in_at = null;
   render(); updateCounts();
   toast(`${g.name} un-checked`);
-  try{
-    await fetch(`${SUPABASE_URL}/rest/v1/guests?id=eq.${id}`, {
-      method:"PATCH", headers:H,
-      body: JSON.stringify({checked_in:false, checked_in_at:null})
-    });
-  }catch(e){}
+  pending[id] = {checked_in:false, checked_in_at:null};
+  saveCheck(id);
 }
 
 // ---- Walk-in ----
 async function addWalkin(){
   const name = searchEl.value.trim();
   if(!name) return;
-  const rec = {name:name, rsvp:'walkin', party_size:1, paid:false,
+  let n = prompt(`How many people for ${name}? (default 1)`, "1");
+  let party = parseInt(n,10); if(!party || party<1) party = 1;
+  const rec = {name:name, rsvp:'walkin', party_size:party, paid:false,
                checked_in:true, checked_in_at:new Date().toISOString()};
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/guests`, {
@@ -426,10 +439,18 @@ let refreshTimer = null;
 function startRefresh(){
   if(refreshTimer) return;
   refreshTimer = setInterval(async ()=>{
+    // 1) retry any check-ins that have not saved yet
+    for(const id of Object.keys(pending)){ saveCheck(id); }
     try{
       const res = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=*&order=name.asc`, {headers:H});
       const fresh = await res.json();
-      if(Array.isArray(fresh) && fresh.length){ guests = fresh; render(); updateCounts(); }
+      if(Array.isArray(fresh) && fresh.length){
+        // keep any local taps that have not been confirmed yet, so the refresh never flips them back
+        for(const gg of fresh){
+          if(pending[gg.id]){ gg.checked_in = pending[gg.id].checked_in; gg.checked_in_at = pending[gg.id].checked_in_at; }
+        }
+        guests = fresh; render(); updateCounts();
+      }
     }catch(e){}
   }, 15000);
 }
