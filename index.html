@@ -91,6 +91,16 @@
   .actions{display:flex;flex-direction:column;gap:6px;align-items:stretch;flex-shrink:0;}
   .btn.give{background:#fff;color:var(--orange);border:1.5px solid var(--orange);font-size:13px;min-width:auto;padding:9px 12px;}
   .btn.give.on{background:var(--orange);color:#fff;}
+  .paddle-row{margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .paddle-row input{font-size:14px;font-weight:700;padding:8px;border:1.5px solid var(--rule);border-radius:8px;text-align:center;color:var(--navy);background:#fff;}
+  .pin-num{width:74px;} .pin-amt{width:96px;}
+  .paddle-row input:focus{border-color:var(--orange);outline:none;}
+  .paddle-row input::placeholder{font-weight:400;color:var(--grey);font-size:12px;}
+  .paid-btn{font-size:13px;font-weight:700;padding:9px 12px;border-radius:8px;border:1.5px solid var(--green);background:#fff;color:var(--green);cursor:pointer;white-space:nowrap;}
+  .paid-btn.on{background:var(--green);color:#fff;}
+  .tag.paddle{background:var(--navy);color:#fff;}
+  .tag.ppaid{background:#E7F4EC;color:var(--green);}
+  .tag.powed{background:#FDECE6;color:var(--orange);}
 
   .checkmark{font-size:15px;margin-right:4px;}
 
@@ -188,6 +198,9 @@
   <div class="tab" data-view="expected" onclick="setView('expected')">
     <span class="n" id="tabYes">0</span>Expected
   </div>
+  <div class="tab" data-view="owed" onclick="setView('owed')">
+    <span class="n" id="tabOwed">0</span>Owed
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -258,6 +271,8 @@ function updateCounts(){
   document.getElementById('tabIn').textContent = inCount;
   document.getElementById('tabTotal').textContent = total;
   document.getElementById('tabYes').textContent = yesCount;
+  const owedCount = guests.filter(g=> Number(g.paddle_amt)>0 && !g.paddle_paid).length;
+  document.getElementById('tabOwed').textContent = owedCount;
 }
 
 // ---- Search box ----
@@ -297,7 +312,8 @@ function render(){
     }
     hint.textContent = "";
     rows = guests.filter(g => g.name.toLowerCase().includes(query)
-                           || (g.email && g.email.toLowerCase().includes(query)));
+                           || (g.email && g.email.toLowerCase().includes(query))
+                           || (g.paddle!=null && String(g.paddle)===query));
     rows.sort((a,b)=> a.name.localeCompare(b.name));
   } else if(view==='in'){
     hint.style.display='none';
@@ -307,6 +323,10 @@ function render(){
     hint.style.display='none';
     rows = guests.filter(g=>g.rsvp==='yes')
                  .sort((a,b)=> Number(a.checked_in)-Number(b.checked_in) || a.name.localeCompare(b.name));
+  } else if(view==='owed'){
+    hint.style.display='none';
+    rows = guests.filter(g=> Number(g.paddle_amt)>0 && !g.paddle_paid)
+                 .sort((a,b)=> (Number(b.paddle_amt)||0)-(Number(a.paddle_amt)||0));
   }
 
   if(rows.length===0){
@@ -319,6 +339,8 @@ function render(){
         </div>`;
     } else if(view==='in'){
       list.innerHTML = `<div class="empty"><div class="big">Nobody checked in yet.</div>They'll show here as they arrive.</div>`;
+    } else if(view==='owed'){
+      list.innerHTML = `<div class="empty"><div class="big">No unpaid pledges.</div>Everyone who pledged has been marked paid.</div>`;
     } else {
       list.innerHTML = `<div class="empty"><div class="big">No "yes" RSVPs loaded.</div></div>`;
     }
@@ -350,12 +372,24 @@ function cardHtml(g){
     : `<button class="btn checkin" onclick="checkin('${g.id}')">Check in</button>`;
 
   const doneBadge = g.checked_in ? `<span class="checkmark">✓</span>` : "";
+  const paddleNumTag = (g.paddle!=null && g.paddle!=='') ? `<span class="tag paddle">Paddle ${g.paddle}</span>` : "";
+  const pAmt = (g.paddle_amt!=null && g.paddle_amt!=='') ? Number(g.paddle_amt) : null;
+  const paddleAmtTag = pAmt ? (g.paddle_paid
+      ? `<span class="tag ppaid">$${pAmt} paid ✓</span>`
+      : `<span class="tag powed">$${pAmt} owed</span>`) : "";
+  const paddleRow = g.checked_in ? `
+        <div class="paddle-row">
+          <input class="pin-num" type="number" inputmode="numeric" min="1" placeholder="Paddle #" value="${g.paddle!=null?g.paddle:''}" onchange="setPaddle('${g.id}', this.value)">
+          <input class="pin-amt" type="number" inputmode="numeric" min="0" placeholder="$ pledged" value="${pAmt!=null?pAmt:''}" onchange="setPaddleAmt('${g.id}', this.value)">
+          <button class="paid-btn${g.paddle_paid?' on':''}" onclick="setPaddlePaid('${g.id}')">${g.paddle_paid?'Paid ✓':'Mark paid'}</button>
+        </div>` : "";
 
   return `
     <div class="card ${g.checked_in?'in':''}" id="card-${g.id}">
       <div class="who">
         <div class="name">${doneBadge}${escapeHtml(g.name)}</div>
-        <div class="meta">${paidTag}${tableTag}${rsvpTag}${partyTag}</div>
+        <div class="meta">${paddleNumTag}${paddleAmtTag}${paidTag}${tableTag}${rsvpTag}${partyTag}</div>
+        ${paddleRow}
       </div>
       <div class="actions">
         ${btn}
@@ -401,6 +435,32 @@ function toggleGave(id){
   toast(g.gave ? `${g.name} marked donated` : `${g.name} donation removed`, g.gave);
   pending[id] = Object.assign({}, pending[id], {gave:g.gave});
   saveCheck(id);
+}
+
+// ---- Paddle number / amount / paid (Square is the money truth; this tracks who pledged and who paid) ----
+function setPaddle(id, val){
+  const g = guests.find(x=>x.id===id); if(!g) return;
+  let n = parseInt(val,10);
+  if(val==='' || isNaN(n) || n<1) n = null;
+  g.paddle = n; render();
+  pending[id] = Object.assign({}, pending[id], {paddle:n});
+  saveCheck(id);
+  if(n!=null) toast(`Paddle ${n} \u2192 ${g.name}`, true);
+}
+function setPaddleAmt(id, val){
+  const g = guests.find(x=>x.id===id); if(!g) return;
+  let n = parseFloat(val);
+  if(val==='' || isNaN(n) || n<0) n = null;
+  g.paddle_amt = n; render(); updateCounts();
+  pending[id] = Object.assign({}, pending[id], {paddle_amt:n});
+  saveCheck(id);
+}
+function setPaddlePaid(id){
+  const g = guests.find(x=>x.id===id); if(!g) return;
+  g.paddle_paid = !g.paddle_paid; render(); updateCounts();
+  pending[id] = Object.assign({}, pending[id], {paddle_paid:g.paddle_paid});
+  saveCheck(id);
+  toast(g.paddle_paid ? `${g.name} paddle marked paid` : `${g.name} paddle unpaid`, g.paddle_paid);
 }
 
 async function undo(id){
