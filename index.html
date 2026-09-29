@@ -351,6 +351,26 @@ function render(){
 }
 
 // ---- One guest card ----
+function metaTags(g){
+  const paidTag = g.paid
+    ? `<span class="tag paid">✓ PAID${g.paid_amount?`</span> <span class="amt">$${Number(g.paid_amount).toFixed(0)}</span>`:`</span>`}`
+    : `<span class="tag ask">ASK / SQUARE</span>`;
+  const tableTag = g.table_name ? ` <span class="tag table">${escapeHtml(g.table_name)}</span>` : "";
+  let rsvpTag = "";
+  if(g.rsvp==='yes') rsvpTag = `<span class="tag yes">RSVP yes</span>`;
+  else if(g.rsvp==='maybe') rsvpTag = `<span class="tag maybe">maybe</span>`;
+  else if(g.rsvp==='no') rsvpTag = `<span class="tag no">said no</span>`;
+  else if(g.rsvp==='walkin') rsvpTag = `<span class="tag walkin">WALK-IN</span>`;
+  else rsvpTag = `<span class="tag noreply">no reply</span>`;
+  const partyTag = (g.party_size && g.party_size>1) ? ` <span class="tag party">party of ${g.party_size}</span>` : "";
+  const paddleNumTag = (g.paddle!=null && g.paddle!=='') ? `<span class="tag paddle">Paddle ${g.paddle}</span>` : "";
+  const pAmt = (g.paddle_amt!=null && g.paddle_amt!=='') ? Number(g.paddle_amt) : null;
+  const paddleAmtTag = pAmt ? (g.paddle_paid
+      ? `<span class="tag ppaid">$${pAmt} paid ✓</span>`
+      : `<span class="tag powed">$${pAmt} owed</span>`) : "";
+  return `${paddleNumTag}${paddleAmtTag}${paidTag}${tableTag}${rsvpTag}${partyTag}`;
+}
+
 function cardHtml(g){
   const paidTag = g.paid
     ? `<span class="tag paid">✓ PAID${g.paid_amount?`</span> <span class="amt">$${Number(g.paid_amount).toFixed(0)}</span>`:`</span>`}`
@@ -388,7 +408,7 @@ function cardHtml(g){
     <div class="card ${g.checked_in?'in':''}" id="card-${g.id}">
       <div class="who">
         <div class="name">${doneBadge}${escapeHtml(g.name)}</div>
-        <div class="meta">${paddleNumTag}${paddleAmtTag}${paidTag}${tableTag}${rsvpTag}${partyTag}</div>
+        <div class="meta">${metaTags(g)}</div>
         ${paddleRow}
       </div>
       <div class="actions">
@@ -438,11 +458,20 @@ function toggleGave(id){
 }
 
 // ---- Paddle number / amount / paid (Square is the money truth; this tracks who pledged and who paid) ----
+function refreshCard(id){
+  const g = guests.find(x=>x.id===id); if(!g) return;
+  const card = document.getElementById('card-'+id);
+  if(!card){ render(); return; }
+  const meta = card.querySelector('.meta'); if(meta) meta.innerHTML = metaTags(g);
+  const paid = card.querySelector('.paid-btn');
+  if(paid){ paid.classList.toggle('on', !!g.paddle_paid); paid.textContent = g.paddle_paid ? 'Paid ✓' : 'Mark paid'; }
+}
+
 function setPaddle(id, val){
   const g = guests.find(x=>x.id===id); if(!g) return;
   let n = parseInt(val,10);
   if(val==='' || isNaN(n) || n<1) n = null;
-  g.paddle = n; render();
+  g.paddle = n; refreshCard(id);
   pending[id] = Object.assign({}, pending[id], {paddle:n});
   saveCheck(id);
   if(n!=null) toast(`Paddle ${n} \u2192 ${g.name}`, true);
@@ -451,13 +480,13 @@ function setPaddleAmt(id, val){
   const g = guests.find(x=>x.id===id); if(!g) return;
   let n = parseFloat(val);
   if(val==='' || isNaN(n) || n<0) n = null;
-  g.paddle_amt = n; render(); updateCounts();
+  g.paddle_amt = n; refreshCard(id); updateCounts();
   pending[id] = Object.assign({}, pending[id], {paddle_amt:n});
   saveCheck(id);
 }
 function setPaddlePaid(id){
   const g = guests.find(x=>x.id===id); if(!g) return;
-  g.paddle_paid = !g.paddle_paid; render(); updateCounts();
+  g.paddle_paid = !g.paddle_paid; refreshCard(id); updateCounts();
   pending[id] = Object.assign({}, pending[id], {paddle_paid:g.paddle_paid});
   saveCheck(id);
   toast(g.paddle_paid ? `${g.name} paddle marked paid` : `${g.name} paddle unpaid`, g.paddle_paid);
@@ -521,6 +550,8 @@ function startRefresh(){
       const res = await fetch(`${SUPABASE_URL}/rest/v1/guests?select=*&order=name.asc`, {headers:H});
       const fresh = await res.json();
       if(Array.isArray(fresh) && fresh.length){
+        const ae = document.activeElement;
+        if(ae && ae.classList && (ae.classList.contains('pin-num')||ae.classList.contains('pin-amt'))) return;
         // keep any local taps that have not been confirmed yet, so the refresh never flips them back
         for(const gg of fresh){
           if(pending[gg.id]){ Object.assign(gg, pending[gg.id]); }
