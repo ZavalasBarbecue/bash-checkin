@@ -471,6 +471,16 @@ function setPaddle(id, val){
   const g = guests.find(x=>x.id===id); if(!g) return;
   let n = parseInt(val,10);
   if(val==='' || isNaN(n) || n<1) n = null;
+  // block a duplicate paddle number (someone else already has it)
+  if(n!=null){
+    const clash = guests.find(x=>x.id!==id && x.paddle===n);
+    if(clash){
+      toast(`Paddle ${n} is already on ${clash.name} — pick another`, false);
+      const inp = document.querySelector('#card-'+id+' .pin-num');
+      if(inp) inp.value = (g.paddle!=null ? g.paddle : '');
+      return;
+    }
+  }
   g.paddle = n; refreshCard(id);
   pending[id] = Object.assign({}, pending[id], {paddle:n});
   saveCheck(id);
