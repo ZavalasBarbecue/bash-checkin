@@ -483,6 +483,8 @@ function setPaddleAmt(id, val){
   g.paddle_amt = n; refreshCard(id); updateCounts();
   pending[id] = Object.assign({}, pending[id], {paddle_amt:n});
   saveCheck(id);
+  // Paddle-raise speed: after an amount is entered, clear the search so the next paddle # is ready
+  if(n!=null && view==='search'){ searchEl.value=''; query=''; render(); searchEl.focus(); }
 }
 function setPaddlePaid(id){
   const g = guests.find(x=>x.id===id); if(!g) return;
