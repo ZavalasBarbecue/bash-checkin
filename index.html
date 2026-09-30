@@ -397,12 +397,12 @@ function cardHtml(g){
   const paddleAmtTag = pAmt ? (g.paddle_paid
       ? `<span class="tag ppaid">$${pAmt} paid ✓</span>`
       : `<span class="tag powed">$${pAmt} owed</span>`) : "";
-  const paddleRow = g.checked_in ? `
+  const paddleRow = `
         <div class="paddle-row">
           <input class="pin-num" type="number" inputmode="numeric" min="1" placeholder="Paddle #" value="${g.paddle!=null?g.paddle:''}" onchange="setPaddle('${g.id}', this.value)">
           <input class="pin-amt" type="number" inputmode="numeric" min="0" placeholder="$ pledged" value="${pAmt!=null?pAmt:''}" onchange="setPaddleAmt('${g.id}', this.value)">
           <button class="paid-btn${g.paddle_paid?' on':''}" onclick="setPaddlePaid('${g.id}')">${g.paddle_paid?'Paid ✓':'Mark paid'}</button>
-        </div>` : "";
+        </div>`;
 
   return `
     <div class="card ${g.checked_in?'in':''}" id="card-${g.id}">
