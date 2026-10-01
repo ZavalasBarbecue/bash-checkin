@@ -313,7 +313,8 @@ function render(){
     hint.textContent = "";
     rows = guests.filter(g => g.name.toLowerCase().includes(query)
                            || (g.email && g.email.toLowerCase().includes(query))
-                           || (g.paddle!=null && String(g.paddle)===query));
+                           || (g.paddle!=null && String(g.paddle)===query)
+                           || (g.table_name && g.table_name.toLowerCase().includes(query)));
     rows.sort((a,b)=> a.name.localeCompare(b.name));
   } else if(view==='in'){
     hint.style.display='none';
